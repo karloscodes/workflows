@@ -4,7 +4,7 @@ Reusable GitHub Actions workflows for every repo of [karloscodes](https://github
 
 ## Use
 
-A repo keeps a small file with its own name and schedule, and calls the workflow by a version tag:
+A repo keeps a small file with its own name and schedule, and calls the workflow at `main`:
 
 ```yaml
 name: Vulncheck
@@ -20,10 +20,12 @@ permissions:
 
 jobs:
   scan:
-    uses: karloscodes/workflows/.github/workflows/vulncheck.yml@v1.1.0
+    uses: karloscodes/workflows/.github/workflows/vulncheck.yml@main
 ```
 
-Dependabot moves the tag in each repo, so a bad change never reaches every repo at once.
+A commit here reaches every repo on its next run, so a revert fixes every repo at once.
+
+**Test a change first.** Push it to a branch, point one public and one private repo at it (`@my-branch`), and run them. Then merge to `main`.
 
 ## Workflows
 
