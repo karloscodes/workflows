@@ -1,6 +1,12 @@
 # workflows
 
+[![CI](https://github.com/karloscodes/workflows/actions/workflows/ci.yml/badge.svg)](https://github.com/karloscodes/workflows/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Reusable GitHub Actions workflows for every repo of [karloscodes](https://github.com/karloscodes). A change here is one commit, not one pull request per repo.
+
+## Install
+
+There is nothing to install. A repo calls a workflow from its own file.
 
 ## Use
 
@@ -46,9 +52,13 @@ A commit here reaches every repo on its next run, so a revert fixes every repo a
 
 A repo keeps what is its own: its tests, its build, and its schedule. `release.yml` of a product, a CLI, or an SDK stays in the repo: each one builds something else, and npm and RubyGems tie trusted publishing to the workflow file.
 
+## Development
+
+A commit to `main` reaches every repo on its next run, and nothing merges by itself here. Run the test above on a branch first, and CI checks every branch with actionlint and gitleaks.
+
 ## Where jobs run
 
-A public repo uses GitHub's runners, never hq. A private repo sets the repository variable `RUNS_ON`, so its scheduled jobs from main run on hq. The code of a pull request never runs on hq, so CI and `claude.yml` always use GitHub's runners.
+A public repo uses GitHub's runners, never hq. A private repo sets the repository variable `RUNS_ON`, so its scheduled jobs from the default branch run on hq. A run by hand on another branch stays on GitHub's runners. The code of a pull request never runs on hq, so CI and `claude.yml` always use GitHub's runners.
 
 ## License
 

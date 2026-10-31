@@ -37,7 +37,7 @@ name: Release train
 #   Stop the train:        gh workflow disable "Release candidate"
 #
 # To adapt:
-#   - Another day or time: change `cron` (minute hour * * weekday, in UTC).
+#   - Another day or time: change `cron` in the caller (minute hour * * weekday, in UTC).
 #   - A longer or shorter wait before a candidate becomes stable: change MIN_DAYS.
 #   - Candidates, but no automatic promotion: delete `github.event_name == 'schedule' ||`.
 # A product calls this from a small file with its schedule. See `on:` there.
@@ -66,6 +66,11 @@ jobs:
       (github.event.workflow_run.name == 'Merge security updates' && github.event.workflow_run.conclusion == 'success') ||
       (github.event.workflow_run.name == 'Vulncheck' && github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
+    # One train at a time: the fast lane and Monday never tag at once. It sits on
+    # the job, so a scan that passed queues nothing and replaces no waiting run.
+    concurrency:
+      group: release-train
+      cancel-in-progress: false
     permissions:
       contents: write
       actions: write

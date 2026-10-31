@@ -3,7 +3,8 @@ name: Vulncheck
 # One daily check of what users run: the branch `production` when it exists,
 # else the newest stable tag, else the default branch. CI and Dependabot watch
 # main. A fix on main does not clear this run: it stays red until the fix ships.
-# A red run emails you. This workflow releases nothing and deploys nothing.
+# A red run emails you. In a product it also starts the rebuild lane of
+# release-train.yml, which rescans the image before it releases anything.
 #
 # Repository variables, all optional:
 #   VULNCHECK_IMAGES   Images to scan, separated by spaces. {sha} is the scanned commit.
@@ -27,7 +28,9 @@ permissions:
 jobs:
   scan:
     name: Scan what users run
-    runs-on: ${{ fromJSON(vars.RUNS_ON || '"ubuntu-latest"') }}
+    # hq runs code from the default branch only: a run by hand on another branch
+    # stays on GitHub's runners.
+    runs-on: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && fromJSON(vars.RUNS_ON || '"ubuntu-latest"') || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

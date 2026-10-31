@@ -11,7 +11,10 @@ permissions:
 
 jobs:
   trigger-rebuild:
-    runs-on: ${{ fromJSON(vars.RUNS_ON || '"ubuntu-latest"') }}
+    # hq runs code from the default branch only: a run by hand on another branch
+    # stays on GitHub's runners.
+    runs-on: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && fromJSON(vars.RUNS_ON || '"ubuntu-latest"') || 'ubuntu-latest' }}
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:

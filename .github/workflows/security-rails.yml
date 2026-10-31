@@ -1,8 +1,8 @@
 name: Security for a Rails app
 
 # Two checks that a pull request can't make, because the risk arrives while
-# the code sits still. A red run emails you. This file is the same in
-# SuppyHQ, Coramatch, and Hoodiechamp.
+# the code sits still. A red run emails you. The caller holds the two cron
+# lines below: change them in both places.
 #
 # Daily, unshipped: a security update that merge-security-updates.yml merged
 # is on main but not live. Merging deploys nothing here; bin/ship does, and
@@ -20,7 +20,9 @@ jobs:
   unshipped:
     name: Security updates shipped
     if: github.event.schedule != '0 6 * * 1'
-    runs-on: ${{ fromJSON(vars.RUNS_ON || '"ubuntu-latest"') }}
+    # hq runs code from the default branch only: a run by hand on another branch
+    # stays on GitHub's runners.
+    runs-on: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && fromJSON(vars.RUNS_ON || '"ubuntu-latest"') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:
