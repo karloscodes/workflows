@@ -1,0 +1,87 @@
+name: Security for a Rails app
+
+# Two checks that a pull request can't make, because the risk arrives while
+# the code sits still. A red run emails you. This file is the same in
+# SuppyHQ, Coramatch, and Hoodiechamp.
+#
+# Daily, unshipped: a security update that merge-security-updates.yml merged
+# is on main but not live. Merging deploys nothing here; bin/ship does, and
+# records what it shipped as the `production` branch. Red until you ship.
+#
+# Weekly, scan: advisories and checks published since the last pull request,
+# with the steps bin/ci runs, and a newer patch of the Ruby image.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  unshipped:
+    name: Security updates shipped
+    if: github.event.schedule != '0 6 * * 1'
+    runs-on: ${{ fromJSON(vars.RUNS_ON || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compare main with what bin/ship deployed
+        run: |
+          set -euo pipefail
+          if ! git fetch -q origin production; then
+            echo "::warning::No production branch yet: bin/ship records it on the next deploy."
+            exit 0
+          fi
+          # Dependabot's security commits on main that the live commit lacks. The
+          # merge keeps Dependabot's metadata in the message.
+          waiting="$(git log --format='%h %cs %s' --no-merges --author='^dependabot\[bot\]' \
+            --grep='^  dependency-group: security$' FETCH_HEAD..HEAD)"
+          if [ -z "$waiting" ]; then echo "Every security update on main is live."; exit 0; fi
+          echo "$waiting"
+          echo "::error::$(wc -l <<<"$waiting") security updates are merged but not live. Run bin/ship."
+          exit 1
+
+  scan:
+    name: Scan for new advisories
+    if: github.event.schedule != '0 7 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install packages
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libvips
+
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      # Each step runs even when one before it failed, so one red run names
+      # every problem.
+      - name: Gem audit
+        run: bin/bundler-audit check --update
+
+      - name: Importmap audit
+        if: ${{ !cancelled() }}
+        run: bin/importmap audit
+
+      # Brakeman reads config/brakeman.ignore by itself when the file exists.
+      - name: Brakeman
+        if: ${{ !cancelled() }}
+        run: bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+
+      # Dependabot can't bump `FROM ruby:$RUBY_VERSION-slim`: the version is an
+      # ARG. The official image list says which patch is newest.
+      - name: Ruby image
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^ARG RUBY_VERSION=//p' Dockerfile)"
+          series="${current%.*}"
+          newest="$(curl -fsS https://raw.githubusercontent.com/docker-library/official-images/master/library/ruby \
+            | sed -n 's/^Tags: //p' | tr ',' '\n' | tr -d ' ' \
+            | grep -E "^${series//./\\.}\.[0-9]+-slim$" | sed 's/-slim$//' | sort -V | tail -1)"
+          [ -n "$newest" ] || { echo "::error::No ruby:$series.*-slim in the official image list."; exit 1; }
+          if [ "$newest" = "$current" ]; then echo "Ruby $current is the newest $series patch."; exit 0; fi
+          echo "::error::Ruby $newest is out; the image runs $current. Bump RUBY_VERSION in the Dockerfile and .ruby-version (and mise.toml where there is one)."
+          exit 1

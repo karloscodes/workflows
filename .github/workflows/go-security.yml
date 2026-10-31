@@ -1,0 +1,91 @@
+name: Go security
+
+# gosec and govulncheck, for every Go repo's CI. A repo differs only in the inputs.
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: "Empty: the exact version in go.mod. A library names its minor: 1.26. go.mod names the oldest Go it supports, and an exact patch pins setup-go."
+        required: false
+        type: string
+        default: ""
+      prepare:
+        description: "Shell to run first, such as the stub files that //go:embed needs."
+        required: false
+        type: string
+        default: ""
+      gosec-flags:
+        description: "Extra gosec flags. Each exclusion needs a reason in the calling repo."
+        required: false
+        type: string
+        default: ""
+      check-dockerfile:
+        description: "A product: check that the Dockerfile builds with the Go of go.mod, on the Alpine it runs on."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gosec:
+    name: gosec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && 'go.mod' || '' }}
+          check-latest: ${{ inputs.go-version != '' }}
+      - name: Prepare
+        if: inputs.prepare != ''
+        env:
+          PREPARE: ${{ inputs.prepare }}
+        run: bash -c "$PREPARE"
+      # gosec v2.29.0 pins a golang.org/x/tools too old to read Go 1.27 packages.
+      - name: Build gosec
+        run: |
+          cd "$(mktemp -d)"
+          go mod init gosec-build
+          go get github.com/securego/gosec/v2/cmd/gosec@v2.29.0 golang.org/x/tools@v0.52.0
+          go build -o "$RUNNER_TEMP/gosec" github.com/securego/gosec/v2/cmd/gosec
+      - name: gosec
+        env:
+          GOSEC_FLAGS: ${{ inputs.gosec-flags }}
+        run: |
+          # The flags are words, so they split on purpose.
+          # shellcheck disable=SC2086
+          "$RUNNER_TEMP/gosec" $GOSEC_FLAGS -severity high -confidence high ./...
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && 'go.mod' || '' }}
+          check-latest: ${{ inputs.go-version != '' }}
+      - name: Prepare
+        if: inputs.prepare != ''
+        env:
+          PREPARE: ${{ inputs.prepare }}
+        run: bash -c "$PREPARE"
+      # govulncheck scans the Go of go.mod, so the image must ship that Go, built on
+      # the Alpine it runs on. The release checks it again; here a Dockerfile-only
+      # bump fails on its pull request.
+      - name: Check the Dockerfile's Go and Alpine
+        if: inputs.check-dockerfile
+        run: |
+          set -euo pipefail
+          mod="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+          builder="$(awk '$1 == "FROM" && $2 ~ /^golang:/ { sub(/^golang:/, "", $2); print $2; exit }' Dockerfile)"
+          runtime="$(awk '$1 == "FROM" && $2 ~ /^alpine:/ { sub(/^alpine:/, "", $2); print $2; exit }' Dockerfile)"
+          if [ -z "${mod}" ] || [ "${builder}" != "${mod}-alpine${runtime}" ]; then
+            echo "Dockerfile: golang:${builder:-?} and alpine:${runtime:-?}; want golang:${mod:-?}-alpine${runtime:-?}"
+            exit 1
+          fi
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

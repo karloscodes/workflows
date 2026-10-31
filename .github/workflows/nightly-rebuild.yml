@@ -1,0 +1,31 @@
+name: Nightly rebuild
+
+# A site saves its download counts each night, and that commit rebuilds the site.
+# Each site has scripts/record-downloads.py. A private repo sets RUNS_ON.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-rebuild:
+    runs-on: ${{ fromJSON(vars.RUNS_ON || '"ubuntu-latest"') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # The registries only report a running total: save today's, so the
+      # stats page can draw them over time.
+      - name: Record today's counts
+        run: python3 scripts/record-downloads.py
+
+      - name: Commit and push, which rebuilds the site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/data/downloads-history.json
+          git commit --allow-empty -m "chore: nightly rebuild"
+          git push

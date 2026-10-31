@@ -1,0 +1,50 @@
+name: Install paths
+
+# The install paths of a product with Chasen, each on a fresh runner: a deploy
+# from a computer, the install line on a server, and the move of a server of
+# the older installer. Each product has these three scripts in e2e/.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit SHA to test. Release passes the tag's commit. Empty uses the event ref."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy with Chasen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+      - name: Deploy the image of this commit, as a new user does
+        run: e2e/chasen.sh
+
+  installer:
+    name: Install line
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+      - name: Install on a fresh server, as a new user does
+        run: e2e/installer.sh
+
+  move:
+    name: Move to Chasen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+      - name: Move a server of the older installer to Chasen
+        run: e2e/move-to-chasen.sh
